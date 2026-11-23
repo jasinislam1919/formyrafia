@@ -173,7 +173,7 @@
   <div class="controls-bar">
     <button class="btn" id="replay-btn" title="Replay Animation">↻ Replay</button>
     <span class="progress-pill" id="stage-status">Growing...</span>
-    <button class="btn" id="rotate-btn" title="Toggle Auto Orbit">⟳ Orbit</button>
+    <button class="btn active" id="rotate-btn" title="Toggle Cinematic Camera">🎬 Cinema</button>
   </div>
 
   <script type="module">
@@ -211,22 +211,30 @@
       bumpCanvas.height = h;
       const bctx = bumpCanvas.getContext('2d');
 
-      // Base creamy white petal gradient
+      // Realistic Stargazer Lily base: lime-chartreuse nectary throat -> soft blush -> pure porcelain white margins
       const baseGrad = ctx.createLinearGradient(0, h, 0, 0);
-      baseGrad.addColorStop(0.0, '#c8e09e');  // pale lime-green throat base
-      baseGrad.addColorStop(0.14, '#f8dce6'); // soft blush
-      baseGrad.addColorStop(0.55, '#fff6f9'); // delicate ivory-pink
-      baseGrad.addColorStop(1.0, '#ffffff');  // crisp white tip
+      baseGrad.addColorStop(0.0, '#9ec96b');  // botanical chartreuse throat base
+      baseGrad.addColorStop(0.11, '#d8e3a8'); // pale pistachio transition
+      baseGrad.addColorStop(0.24, '#f7d4e2'); // soft rose blush
+      baseGrad.addColorStop(0.62, '#fff5f8'); // translucent porcelain white
+      baseGrad.addColorStop(1.0, '#ffffff');  // crisp snow-white recurved tip
       ctx.fillStyle = baseGrad;
       ctx.fillRect(0, 0, w, h);
 
-      // Central Stargazer magenta/crimson flame stripe
-      const stripeGrad = ctx.createRadialGradient(w * 0.5, h * 0.72, 12, w * 0.5, h * 0.62, w * 0.44);
-      stripeGrad.addColorStop(0.0, 'rgba(198, 22, 92, 0.94)');
-      stripeGrad.addColorStop(0.45, 'rgba(226, 62, 126, 0.78)');
-      stripeGrad.addColorStop(0.78, 'rgba(244, 148, 184, 0.28)');
+      // Rich crimson-magenta central flame band with soft organic feathering
+      const stripeGrad = ctx.createRadialGradient(w * 0.5, h * 0.68, 10, w * 0.5, h * 0.58, w * 0.43);
+      stripeGrad.addColorStop(0.0, 'rgba(176, 16, 78, 0.96)');
+      stripeGrad.addColorStop(0.38, 'rgba(214, 46, 112, 0.84)');
+      stripeGrad.addColorStop(0.68, 'rgba(238, 128, 170, 0.36)');
       stripeGrad.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
       ctx.fillStyle = stripeGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // Subtle central emerald-gold nectary groove at very base
+      const throatGrad = ctx.createRadialGradient(w * 0.5, h * 0.96, 4, w * 0.5, h * 0.9, w * 0.16);
+      throatGrad.addColorStop(0.0, 'rgba(126, 178, 72, 0.85)');
+      throatGrad.addColorStop(1.0, 'rgba(126, 178, 72, 0.0)');
+      ctx.fillStyle = throatGrad;
       ctx.fillRect(0, 0, w, h);
 
       // Longitudinal botanical veins (color + bump)
@@ -373,63 +381,6 @@
       };
     }
 
-    /**
-     * Samples crisp 2D points from offscreen canvas typography so hundreds of
-     * tiny 3D hearts assemble cleanly into the two-line romantic message.
-     */
-    function sampleTextPoints(lines, { maxPoints = 950 } = {}) {
-      const cw = 1200;
-      const ch = 420;
-      const canvas = document.createElement('canvas');
-      canvas.width = cw;
-      canvas.height = ch;
-      const ctx = canvas.getContext('2d');
-
-      ctx.fillStyle = '#000000';
-      ctx.fillRect(0, 0, cw, ch);
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      // Line 1: "Jasin Loves You Most"
-      ctx.font = 'italic 600 94px "Cormorant Garamond", Georgia, serif';
-      ctx.fillText(lines[0], cw * 0.5, ch * 0.33);
-
-      // Line 2: "Forever Yours..."
-      ctx.font = 'italic 500 78px "Cormorant Garamond", Georgia, serif';
-      ctx.fillText(lines[1], cw * 0.5, ch * 0.71);
-
-      const img = ctx.getImageData(0, 0, cw, ch).data;
-      const candidates = [];
-      const step = 4; // fine grid step so letter curves stay super sharp
-
-      for (let y = 0; y < ch; y += step) {
-        for (let x = 0; x < cw; x += step) {
-          const idx = (y * cw + x) * 4;
-          const lum = img[idx];
-          if (lum > 110) {
-            candidates.push({
-              x: (x / cw) * 2 - 1,
-              y: -((y / ch) * 2 - 1),
-              line: y < ch * 0.52 ? 0 : 1,
-              weight: lum / 255
-            });
-          }
-        }
-      }
-
-      // Deterministic even sub-sampling across all letters
-      const rand = mulberry32(4242);
-      for (let i = candidates.length - 1; i > 0; i--) {
-        const j = Math.floor(rand() * (i + 1));
-        const tmp = candidates[i];
-        candidates[i] = candidates[j];
-        candidates[j] = tmp;
-      }
-
-      return candidates.slice(0, maxPoints);
-    }
-
     /* ======================================================================
        2. CUSTOM GLSL SHADERS (CLEAN UV-GRID TO SHADED BOTANICAL MESH)
        ====================================================================== */
@@ -483,7 +434,6 @@
 
           void main() {
             vUv = uv;
-            // Smooth natural taper along stem length (uv.x in TubeGeometry)
             float scaleTaper = mix(1.0, uTaper, pow(uv.x, 0.85));
             vec3 pos = position - normal * (uRadius * (1.0 - scaleTaper));
             vec4 worldPos = modelMatrix * vec4(pos, 1.0);
@@ -512,7 +462,6 @@
             float axis = vUv.x;
             if (axis > uGrow) discard;
 
-            // Leading-edge bright cellular compile pulse
             float edgeDist = uGrow - axis;
             float leadingPulse = smoothstep(0.09, 0.0, edgeDist) * step(0.001, uGrow);
 
@@ -526,7 +475,6 @@
             vec3 organic = mix(uColorA, uColorB, vUv.x) * ndl + uColorB * fresnel * 0.25;
             vec3 wireCol = uGridColor * (1.15 + leadingPulse * 1.4);
 
-            // Wireframe phase shows luminous grid + faint translucent core; solid phase fills smoothly
             float wireVisibility = max(grid * 0.95, 0.14);
             vec3 col = mix(wireCol * wireVisibility, organic, shadeMask);
             col += wireCol * grid * (1.0 - shadeMask * 0.82) * 0.85;
@@ -581,20 +529,17 @@
 
           void main() {
             vUv = uv;
-            float u = uv.x * 2.0 - 1.0; // -1..1 across leaf width
-            float v = uv.y;             // 0..1 base to pointed tip
+            float u = uv.x * 2.0 - 1.0;
+            float v = uv.y;
 
-            // Slender lance-shaped lily leaf silhouette
             float widthEnv = sin(pow(v, 0.62) * 3.14159265) * (1.0 - pow(v, 3.2) * 0.35);
             float x = u * uSize.x * widthEnv;
             float y = v * uSize.y;
 
-            // Graceful downward arch + V-fold along central midrib
             float z = pow(v, 1.85) * uArch * uSize.y * 0.48;
             z -= abs(u) * uFold * uSize.x * widthEnv;
             z += sin(v * 9.0 + uSeed * 6.28) * uWave * uSize.x * widthEnv * v;
 
-            // Analytic normal approximation
             vec3 nLocal = normalize(vec3(-sign(u) * uFold * 0.45, -v * uArch * 0.55, 1.0));
             vec4 worldPos = modelMatrix * vec4(x, y, z, 1.0);
             vNormalW = normalize(mat3(modelMatrix) * nLocal);
@@ -699,19 +644,16 @@
 
           void main() {
             vUv = uv;
-            float u = uv.x * 2.0 - 1.0; // -1..1 across petal width
-            float v = uv.y;             // 0..1 base to pointed apex
+            float u = uv.x * 2.0 - 1.0;
+            float v = uv.y;
 
-            // Stargazer Lily ovate-lanceolate petal profile
             float widthEnv = sin(pow(v, 0.58) * 3.14159265) * (1.0 - pow(v, 4.0) * 0.25);
             float x = u * uSize.x * widthEnv;
             float y = v * uSize.y;
 
-            // Graceful outward recurve as the flower blooms (uBloom 0 -> 1)
             float bloomEase = uBloom * uBloom * (3.0 - 2.0 * uBloom);
             float bend = pow(v, 2.05) * uRecurve * bloomEase * 0.42;
 
-            // Cross-sectional cupping + delicate wavy margin ruffle
             float cupOffset = -(1.0 - u * u) * uCup * widthEnv * (1.0 - bloomEase * 0.35);
             float edgeFactor = pow(abs(u), 2.2) * sin(v * 3.14159265);
             float waveOffset = sin(v * uRuffleFreq + uSeed * 6.2831) * uRuffle * edgeFactor * 0.14 * bloomEase;
@@ -763,14 +705,12 @@
             vec3 vDir = normalize(vViewDir);
 
             float ndl = max(dot(n, uLightDir), 0.0) * 0.62 + 0.38;
-            // Subsurface scattering / backlit translucency through delicate petals
             float sss = pow(max(dot(-vDir, uLightDir), 0.0), 2.0) * uTransl;
             float rim = pow(1.0 - max(dot(n, vDir), 0.0), 2.4) * 0.25;
 
             vec3 texCol = texture2D(uColorMap, vUv).rgb;
             vec3 organic = texCol * ndl + texCol * uTranslColor * sss + vec3(1.0, 0.92, 0.96) * rim;
 
-            // Luminous holographic wireframe lattice before solid bloom fills in
             vec3 wireCol = uGridColor * (1.2 + leadingPulse * 1.5);
             vec3 col = mix(wireCol * max(grid, 0.16), organic, shadeMask);
             col += wireCol * grid * (1.0 - shadeMask * 0.88) * 0.9;
@@ -856,151 +796,235 @@
     const _m = new THREE.Matrix4();
 
     const STEM_POINTS = [
-      [0.0, -0.65, 0.0],
-      [0.12, 0.15, 0.05],
-      [-0.1, 0.95, 0.02],
-      [-0.18, 1.75, 0.06],
-      [-0.02, 2.45, 0.18],
-      [0.18, 2.85, 0.28],
-      [0.35, 3.15, 0.35]
+      [0.0, -0.75, 0.0],
+      [0.08, 0.05, 0.06],
+      [-0.07, 0.85, -0.05],
+      [-0.1, 1.65, 0.08],
+      [0.04, 2.45, -0.04],
+      [0.08, 3.05, 0.06],
+      [0.02, 3.55, 0.02]
     ];
 
+    // 12 full 3D Stargazer Lilies arranged in a true 360-degree phyllotactic spiral around the stem
     const BLOOMS = [
       {
-        name: 'top',
-        position: [0.35, 3.15, 0.35],
-        axis: [0.35, 0.85, 0.35],
+        name: 'apexCrown',
+        position: [0.02, 3.55, 0.02],
+        axis: [0.12, 0.96, 0.24],
         scale: 1.0,
         spin: 0.2,
         seed: 11,
         attach: null,
-        timeline: { grow: [0.0, 0.22], shade: [0.08, 0.42], open: [0.26, 0.86] }
+        timeline: { grow: [0.0, 0.22], shade: [0.08, 0.4], open: [0.22, 0.8] }
       },
       {
-        name: 'middle',
-        position: [-1.1, 1.85, 0.35],
-        axis: [-0.45, 0.75, 0.55],
-        scale: 0.9,
-        spin: 0.9,
+        name: 'frontUpper',
+        position: [0.18, 2.95, 0.88],
+        axis: [0.18, 0.65, 0.74],
+        scale: 0.94,
+        spin: 0.75,
+        seed: 17,
+        attach: 0.84,
+        pedicel: [0.02, 0.22],
+        timeline: { grow: [0.06, 0.26], shade: [0.14, 0.46], open: [0.26, 0.84] }
+      },
+      {
+        name: 'backUpper',
+        position: [-0.24, 3.05, -0.86],
+        axis: [-0.22, 0.68, -0.7],
+        scale: 0.92,
+        spin: 1.35,
         seed: 23,
-        attach: 0.56,
-        pedicel: [0.0, 0.2],
-        timeline: { grow: [0.14, 0.34], shade: [0.2, 0.54], open: [0.36, 0.94] }
+        attach: 0.86,
+        pedicel: [0.04, 0.24],
+        timeline: { grow: [0.08, 0.28], shade: [0.16, 0.48], open: [0.28, 0.86] }
       },
       {
-        name: 'low',
-        position: [1.05, 1.1, 0.4],
-        axis: [0.5, 0.7, 0.55],
-        scale: 0.8,
-        spin: 1.7,
-        seed: 37,
-        attach: 0.36,
+        name: 'rightMidHigh',
+        position: [0.98, 2.55, 0.36],
+        axis: [0.76, 0.56, 0.32],
+        scale: 0.9,
+        spin: 1.9,
+        seed: 29,
+        attach: 0.72,
         pedicel: [0.06, 0.26],
-        timeline: { grow: [0.22, 0.42], shade: [0.28, 0.62], open: [0.46, 1.0] }
+        timeline: { grow: [0.1, 0.3], shade: [0.18, 0.5], open: [0.3, 0.88] }
       },
       {
-        name: 'upperLeft',
-        position: [-0.85, 2.68, 0.22],
-        axis: [-0.38, 0.86, 0.34],
-        scale: 0.76,
-        spin: 2.3,
-        seed: 43,
-        attach: 0.76,
-        pedicel: [0.12, 0.32],
-        timeline: { grow: [0.24, 0.46], shade: [0.3, 0.64], open: [0.5, 1.0] }
+        name: 'leftMidHigh',
+        position: [-0.96, 2.62, -0.34],
+        axis: [-0.75, 0.58, -0.32],
+        scale: 0.9,
+        spin: 2.45,
+        seed: 37,
+        attach: 0.74,
+        pedicel: [0.08, 0.28],
+        timeline: { grow: [0.12, 0.32], shade: [0.2, 0.52], open: [0.32, 0.9] }
       },
       {
-        name: 'lowerLeft',
-        position: [-0.92, 0.85, 0.36],
-        axis: [-0.48, 0.68, 0.55],
-        scale: 0.72,
-        spin: 2.9,
+        name: 'frontLeftMid',
+        position: [-0.72, 2.02, 0.78],
+        axis: [-0.56, 0.52, 0.64],
+        scale: 0.88,
+        spin: 0.45,
+        seed: 41,
+        attach: 0.58,
+        pedicel: [0.1, 0.3],
+        timeline: { grow: [0.14, 0.34], shade: [0.22, 0.54], open: [0.34, 0.92] }
+      },
+      {
+        name: 'backRightMid',
+        position: [0.74, 2.08, -0.78],
+        axis: [0.58, 0.54, -0.61],
+        scale: 0.86,
+        spin: 1.1,
         seed: 47,
-        attach: 0.24,
+        attach: 0.6,
+        pedicel: [0.12, 0.32],
+        timeline: { grow: [0.16, 0.36], shade: [0.24, 0.56], open: [0.36, 0.93] }
+      },
+      {
+        name: 'frontRightLow',
+        position: [0.78, 1.48, 0.72],
+        axis: [0.6, 0.5, 0.62],
+        scale: 0.84,
+        spin: 1.65,
+        seed: 53,
+        attach: 0.44,
         pedicel: [0.14, 0.34],
-        timeline: { grow: [0.28, 0.5], shade: [0.34, 0.68], open: [0.54, 1.0] }
+        timeline: { grow: [0.18, 0.38], shade: [0.26, 0.58], open: [0.38, 0.94] }
+      },
+      {
+        name: 'backLeftLow',
+        position: [-0.76, 1.54, -0.74],
+        axis: [-0.58, 0.52, -0.62],
+        scale: 0.84,
+        spin: 2.2,
+        seed: 59,
+        attach: 0.46,
+        pedicel: [0.16, 0.36],
+        timeline: { grow: [0.2, 0.4], shade: [0.28, 0.6], open: [0.4, 0.95] }
+      },
+      {
+        name: 'frontCenterLow',
+        position: [-0.14, 1.15, 0.92],
+        axis: [-0.12, 0.48, 0.87],
+        scale: 0.8,
+        spin: 2.8,
+        seed: 67,
+        attach: 0.34,
+        pedicel: [0.18, 0.38],
+        timeline: { grow: [0.22, 0.42], shade: [0.3, 0.62], open: [0.42, 0.96] }
+      },
+      {
+        name: 'backCenterLow',
+        position: [0.16, 1.22, -0.9],
+        axis: [0.14, 0.5, -0.85],
+        scale: 0.8,
+        spin: 0.95,
+        seed: 73,
+        attach: 0.36,
+        pedicel: [0.2, 0.4],
+        timeline: { grow: [0.24, 0.44], shade: [0.32, 0.64], open: [0.44, 0.97] }
+      },
+      {
+        name: 'leftLowerSide',
+        position: [-0.95, 0.92, 0.26],
+        axis: [-0.78, 0.48, 0.38],
+        scale: 0.78,
+        spin: 1.5,
+        seed: 83,
+        attach: 0.26,
+        pedicel: [0.22, 0.42],
+        timeline: { grow: [0.26, 0.46], shade: [0.34, 0.66], open: [0.46, 0.98] }
       }
     ];
 
+    // 6 buds radiating 360° around the upper and mid-stem
     const BUDS = [
       {
-        name: 'budRight',
+        name: 'budFrontTop',
         isBud: true,
-        position: [1.9, 2.35, 0.1],
-        axis: [0.7, 0.65, 0.1],
-        scale: 0.55,
-        spin: 0.4,
-        seed: 51,
-        attach: 0.7,
-        via: [
-          [0.5, 2.28, 0.2],
-          [1.3, 2.15, 0.2]
-        ],
-        pedicel: [0.1, 0.32],
-        maxOpen: 0.2,
-        timeline: { grow: [0.2, 0.42], shade: [0.26, 0.6], open: [0.5, 1.0] }
-      },
-      {
-        name: 'budLeft',
-        isBud: true,
-        position: [-1.6, 3.0, -0.1],
-        axis: [-0.5, 0.8, -0.2],
+        position: [0.42, 3.62, 0.56],
+        axis: [0.35, 0.82, 0.45],
         scale: 0.5,
-        spin: 1.2,
-        seed: 63,
-        attach: 0.8,
-        via: [[-0.5, 2.8, 0.05]],
-        pedicel: [0.16, 0.38],
-        maxOpen: 0.1,
-        timeline: { grow: [0.26, 0.48], shade: [0.32, 0.66], open: [0.55, 1.0] }
+        spin: 0.4,
+        seed: 91,
+        attach: 0.92,
+        via: [[0.2, 3.35, 0.28]],
+        pedicel: [0.12, 0.34],
+        maxOpen: 0.18,
+        timeline: { grow: [0.2, 0.42], shade: [0.28, 0.62], open: [0.5, 1.0] }
       },
       {
-        name: 'budCrownRight',
+        name: 'budBackTop',
         isBud: true,
-        position: [1.35, 2.95, 0.18],
-        axis: [0.42, 0.88, 0.2],
+        position: [-0.46, 3.68, -0.52],
+        axis: [-0.38, 0.84, -0.39],
         scale: 0.48,
+        spin: 1.2,
+        seed: 97,
+        attach: 0.94,
+        via: [[-0.22, 3.4, -0.26]],
+        pedicel: [0.14, 0.36],
+        maxOpen: 0.14,
+        timeline: { grow: [0.22, 0.44], shade: [0.3, 0.64], open: [0.52, 1.0] }
+      },
+      {
+        name: 'budRightOuter',
+        isBud: true,
+        position: [1.18, 2.98, -0.38],
+        axis: [0.76, 0.58, -0.28],
+        scale: 0.52,
         spin: 1.9,
-        seed: 79,
-        attach: 0.86,
-        via: [[0.65, 2.85, 0.24]],
+        seed: 101,
+        attach: 0.8,
+        via: [[0.58, 2.82, -0.18]],
+        pedicel: [0.16, 0.38],
+        maxOpen: 0.2,
+        timeline: { grow: [0.24, 0.46], shade: [0.32, 0.66], open: [0.54, 1.0] }
+      },
+      {
+        name: 'budLeftOuter',
+        isBud: true,
+        position: [-1.18, 2.88, 0.42],
+        axis: [-0.74, 0.58, 0.34],
+        scale: 0.5,
+        spin: 2.5,
+        seed: 109,
+        attach: 0.78,
+        via: [[-0.56, 2.74, 0.2]],
+        pedicel: [0.18, 0.4],
+        maxOpen: 0.16,
+        timeline: { grow: [0.26, 0.48], shade: [0.34, 0.68], open: [0.56, 1.0] }
+      },
+      {
+        name: 'budBackRightLow',
+        isBud: true,
+        position: [0.92, 1.02, -0.45],
+        axis: [0.72, 0.52, -0.46],
+        scale: 0.48,
+        spin: 0.8,
+        seed: 113,
+        attach: 0.3,
+        via: [[0.45, 0.96, -0.22]],
         pedicel: [0.2, 0.42],
         maxOpen: 0.15,
-        timeline: { grow: [0.3, 0.52], shade: [0.36, 0.7], open: [0.58, 1.0] }
-      }
-    ];
-
-    const BUDS = [
-      {
-        name: 'budRight',
-        isBud: true,
-        position: [1.9, 2.35, 0.1],
-        axis: [0.7, 0.65, 0.1],
-        scale: 0.55,
-        spin: 0.4,
-        seed: 51,
-        attach: 0.7,
-        via: [
-          [0.5, 2.28, 0.2],
-          [1.3, 2.15, 0.2]
-        ],
-        pedicel: [0.1, 0.32],
-        maxOpen: 0.2,
-        timeline: { grow: [0.2, 0.42], shade: [0.26, 0.6], open: [0.5, 1.0] }
+        timeline: { grow: [0.28, 0.5], shade: [0.36, 0.7], open: [0.58, 1.0] }
       },
       {
-        name: 'budLeft',
+        name: 'budApexTip',
         isBud: true,
-        position: [-1.6, 3.0, -0.1],
-        axis: [-0.5, 0.8, -0.2],
-        scale: 0.5,
-        spin: 1.2,
-        seed: 63,
-        attach: 0.8,
-        via: [[-0.5, 2.8, 0.05]],
+        position: [-0.08, 3.92, 0.06],
+        axis: [-0.08, 0.99, 0.08],
+        scale: 0.45,
+        spin: 1.6,
+        seed: 127,
+        attach: 0.97,
+        via: [[-0.02, 3.72, 0.04]],
         pedicel: [0.16, 0.38],
-        maxOpen: 0.1,
-        timeline: { grow: [0.26, 0.48], shade: [0.32, 0.66], open: [0.55, 1.0] }
+        maxOpen: 0.12,
+        timeline: { grow: [0.24, 0.46], shade: [0.32, 0.66], open: [0.52, 1.0] }
       }
     ];
 
@@ -1043,7 +1067,7 @@
           seed: (i * 0.137 + 0.21) % 1,
           colorMap: textures.leafColor,
           bumpMap: textures.leafBump,
-          gridDensity: [Math.max(4, Math.round((halfWidth * 2) / 0.035)), Math.round(length / 0.035)]
+          gridDensity: [Math.max(8, Math.round((halfWidth * 2) / 0.018)), Math.round(length / 0.018)]
         });
 
         const mesh = new THREE.Mesh(geometry, material);
@@ -1086,7 +1110,7 @@
           ruffleFreq: 16 + rand() * 6,
           translColor: isBud ? 0xcfe8a8 : 0xff9fb4,
           transl: isBud ? 0.35 : 0.55,
-          gridDensity: [7, 14]
+          gridDensity: [14, 28]
         });
         const mesh = new THREE.Mesh(petalGeometry, material);
         mesh.frustumCulled = false;
@@ -1129,10 +1153,10 @@
           colorB: 0xf3efd0
         });
         antherMaterial = createSolidMaterial({
-          color: 0x8a2a10,
-          emissive: 0x2a0c02,
-          shininess: 30,
-          specular: 0.3,
+          color: 0xa63412,
+          emissive: 0x3b1204,
+          shininess: 36,
+          specular: 0.42,
           appear: 0
         });
         const tip = filamentCurve.getPointAt(1);
@@ -1256,8 +1280,8 @@
         STEM_POINTS.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
         0.055,
         { taper: 0.62, colorA: 0x1a5429, colorB: 0x5fae5a },
-        220,
-        0.085
+        260,
+        0.042
       );
       group.add(stem.mesh);
 
@@ -1280,7 +1304,7 @@
           }
           pts.push(end.clone().addScaledVector(axis, -0.45));
           pts.push(end.clone());
-          const ped = makeTube(pts, 0.026, { taper: 0.8, colorA: 0x1d5a2e, colorB: 0x4f9e52 }, 56, 0.07);
+          const ped = makeTube(pts, 0.026, { taper: 0.8, colorA: 0x1d5a2e, colorB: 0x4f9e52 }, 64, 0.036);
           group.add(ped.mesh);
           pedicels.push({ material: ped.material, window: cfg.pedicel || [0, 0.2] });
         }
@@ -1292,13 +1316,7 @@
       BLOOMS.forEach(addBloom);
       BUDS.forEach(addBloom);
 
-      const anchors = {
-        top: new THREE.Vector3().fromArray(BLOOMS[0].position),
-        middle: new THREE.Vector3().fromArray(BLOOMS[1].position),
-        low: new THREE.Vector3().fromArray(BLOOMS[2].position),
-        upperLeft: new THREE.Vector3().fromArray(BLOOMS[3].position),
-        lowerLeft: new THREE.Vector3().fromArray(BLOOMS[4].position)
-      };
+      const anchors = BLOOMS.map((b) => new THREE.Vector3().fromArray(b.position));
 
       function update(progress, time) {
         const s1 = progress / STAGE.growthEnd;
@@ -1330,7 +1348,7 @@
       }
 
       update(0, 0);
-      return { group, update, anchors };
+      return { group, update, anchors, stemCurve: stem.curve };
     }
 
     /* ======================================================================
@@ -1371,14 +1389,10 @@
       return geo;
     }
 
-    /**
-     * Renders crisp offscreen typography for both the romantic dedication and
-     * the final "J+R" monogram, sampling dense point clouds so letters read clearly.
-     */
     function sampleMessageAndMonogramPoints({
       lines = ['Jasin Loves You Most', 'Forever Yours...'],
       monogram = 'J+R',
-      maxPoints = 1500
+      maxPoints = 1650
     } = {}) {
       const rand = mulberry32(4242);
 
@@ -1418,7 +1432,6 @@
           }
         }
 
-        // Shuffle deterministically so sub-sampling preserves letter outlines evenly
         for (let i = candidates.length - 1; i > 0; i--) {
           const j = Math.floor(rand() * (i + 1));
           const tmp = candidates[i];
@@ -1460,7 +1473,6 @@
         3
       );
 
-      // Add a delicate heart-ring accent around the "J+R" finale monogram
       const ringHearts = 140;
       for (let i = 0; i < ringHearts; i++) {
         const a = (i / ringHearts) * Math.PI * 2;
@@ -1484,16 +1496,14 @@
       const rand = mulberry32(2026);
       const count = Math.max(mainPoints.length, monoPoints.length);
 
-      // Larger, clearer layout below the blooms so every word reads cleanly
-      const textWidth = 5.55;
-      const textHeight = 1.95;
-      const centerY = -1.48;
+      const textWidth = 5.1;
+      const textHeight = 1.85;
+      const centerY = -1.42;
       const centerZ = 0.68;
 
-      // Finale "J+R" layout
       const monoScaleX = 2.65;
       const monoScaleY = 1.85;
-      const monoCenterY = -1.42;
+      const monoCenterY = -1.38;
 
       const heartGeo = buildHeartGeometry();
       const heartMat = new THREE.MeshStandardMaterial({
@@ -1521,7 +1531,7 @@
       const mainTargets = new Float32Array(count * 3);
       const monoTargets = new Float32Array(count * 3);
       const starts = new Float32Array(count * 3);
-      const swirlParams = new Float32Array(count * 4); // radius, speed, phase, delay
+      const swirlParams = new Float32Array(count * 4);
       const baseScales = new Float32Array(count);
       const monoScales = new Float32Array(count);
       const isRingFlags = new Float32Array(count);
@@ -1535,17 +1545,14 @@
         const i3 = i * 3;
         const i4 = i * 4;
 
-        // Primary message target
         mainTargets[i3] = mp.x * (textWidth * 0.5);
         mainTargets[i3 + 1] = centerY + mp.y * (textHeight * 0.5);
         mainTargets[i3 + 2] = centerZ + (rand() - 0.5) * 0.1;
 
-        // Finale "J+R" target
         monoTargets[i3] = jrp.x * (monoScaleX * 0.5);
         monoTargets[i3 + 1] = monoCenterY + jrp.y * (monoScaleY * 0.5);
         monoTargets[i3 + 2] = centerZ + (jrp.isRing ? 0.18 : 0.04) + (rand() - 0.5) * 0.08;
 
-        // Spawn origin from the lily blooms
         const origin = origins[i % origins.length];
         starts[i3] = origin.x + (rand() - 0.5) * 0.55;
         starts[i3 + 1] = origin.y + (rand() - 0.5) * 0.55;
@@ -1557,7 +1564,6 @@
         const lineBias = mp.line === 0 ? 0.0 : 0.14;
         swirlParams[i4 + 3] = clamp01(lineBias + rand() * 0.25);
 
-        // Crisp heart size so letters stay legible without clumping into a blob
         baseScales[i] = lerp(0.025, 0.036, rand()) * lerp(0.9, 1.12, mp.weight ?? 1);
         monoScales[i] = jrp.isRing
           ? lerp(0.024, 0.032, rand())
@@ -1612,14 +1618,12 @@
       const dummy = new THREE.Object3D();
 
       function update(progress, time) {
-        // Phase IIIa: Romantic message forms from ~0.60 -> 0.80
-        const msgStart = STAGE.bloomEnd - 0.08;
-        const msgEnd = 0.80;
+        const msgStart = STAGE.bloomEnd - 0.10;
+        const msgEnd = 0.72;
         const rawMsg = (progress - msgStart) / Math.max(msgEnd - msgStart, 0.001);
 
-        // Phase IIIb: Finale "J+R" morphs smoothly from ~0.82 -> 0.98
-        const jrStart = 0.82;
-        const jrEnd = 0.98;
+        const jrStart = 0.87;
+        const jrEnd = 0.99;
         const jrBlend = easeInOutCubic((progress - jrStart) / Math.max(jrEnd - jrStart, 0.001));
 
         for (let i = 0; i < count; i++) {
@@ -1643,12 +1647,10 @@
           const sy = starts[i3 + 1];
           const sz = starts[i3 + 2];
 
-          // Morph from stem/blooms into main message, then swirl into "J+R"
           const m1x = lerp(sx, mainTargets[i3], morph);
           const m1y = lerp(sy, mainTargets[i3 + 1], morph);
           const m1z = lerp(sz, mainTargets[i3 + 2], morph);
 
-          // Add an orbital swirl arc during the "J+R" transition
           const jrArc = Math.sin(jrBlend * Math.PI);
           const phase = swirlParams[i4 + 2];
           const swirlAngle = phase + jrArc * 5.2 * (swirlParams[i4 + 1] > 0 ? 1 : -1);
@@ -1736,7 +1738,7 @@
     }
 
     /* ======================================================================
-       5. MAIN SCENE & TIMELINE ORCHESTRATION
+       5. MAIN SCENE & CINEMATIC CAMERA CHOREOGRAPHY
        ====================================================================== */
 
     const container = document.getElementById('canvas-container');
@@ -1770,27 +1772,35 @@
 
     function getIdealCameraDistance() {
       const aspect = window.innerWidth / Math.max(window.innerHeight, 1);
-      return aspect < 0.75 ? 9.6 : aspect < 1.1 ? 8.3 : 7.4;
+      const vFov = THREE.MathUtils.degToRad(camera.fov);
+      const halfHeightWorld = 3.55;
+      const halfWidthWorld = 2.85;
+      const distV = halfHeightWorld / Math.tan(vFov * 0.5);
+      const distH = halfWidthWorld / (Math.tan(vFov * 0.5) * Math.max(aspect, 0.35));
+      return Math.max(distV, distH) * 1.08;
     }
 
-    camera.position.set(0.35, 1.15, getIdealCameraDistance());
+    camera.position.set(0.35, 0.92, getIdealCameraDistance());
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 0.85, 0.25);
+    controls.target.set(0, 0.82, 0.25);
     controls.enableDamping = true;
     controls.dampingFactor = 0.055;
     controls.enablePan = false;
-    controls.minDistance = 4.2;
-    controls.maxDistance = 14.5;
-    controls.minPolarAngle = Math.PI * 0.22;
-    controls.maxPolarAngle = Math.PI * 0.72;
-    controls.autoRotate = false;
-    controls.autoRotateSpeed = 0.5;
-    controls.update();
+    controls.minDistance = 3.6;
+    controls.maxDistance = 18.0;
 
     let userInteracting = false;
-    controls.addEventListener('start', () => { userInteracting = true; });
-    controls.addEventListener('end', () => { userInteracting = false; });
+    let manualOverrideTimer = 0;
+    let cinemaCamEnabled = true;
+
+    controls.addEventListener('start', () => {
+      userInteracting = true;
+      manualOverrideTimer = 4.0; // Pause auto-choreography briefly after manual drag
+    });
+    controls.addEventListener('end', () => {
+      userInteracting = false;
+    });
 
     const hemiLight = new THREE.HemisphereLight(0xffeef6, 0x0a1a12, 0.85);
     scene.add(hemiLight);
@@ -1798,14 +1808,14 @@
     const keyLight = new THREE.DirectionalLight(0xfff5fa, 2.2);
     keyLight.position.set(3.2, 5.5, 4.5);
     scene.add(keyLight);
-
-    const rimLight = new THREE.DirectionalLight(0xff9ec4, 1.45);
-    rimLight.position.set(-3.5, 4.2, -3.8);
-    scene.add(rimLight);
-
-    const fillLight = new THREE.PointLight(0x52d681, 0.9, 12);
+    const fillLight = new THREE.PointLight(0x52d681, 0.95, 12);
     fillLight.position.set(-1.5, 0.4, 2.5);
     scene.add(fillLight);
+
+    // Back-side fill light so 360-degree rear flowers look equally lush and luminous
+    const backFillLight = new THREE.PointLight(0xffb6d2, 1.15, 14);
+    backFillLight.position.set(0.5, 2.6, -3.4);
+    scene.add(backFillLight);
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
@@ -1820,7 +1830,6 @@
     composer.addPass(new OutputPass());
 
     async function init() {
-      // Wait briefly for Cormorant Garamond webfont so heart text typography is crisp
       if (document.fonts && document.fonts.ready) {
         try {
           await Promise.race([
@@ -1838,16 +1847,10 @@
       const { mainPoints, monoPoints } = sampleMessageAndMonogramPoints({
         lines: ['Jasin Loves You Most', 'Forever Yours...'],
         monogram: 'J+R',
-        maxPoints: 1550
+        maxPoints: 1650
       });
 
-      const worldOrigins = [
-        lily.anchors.top.clone().add(lily.group.position),
-        lily.anchors.middle.clone().add(lily.group.position),
-        lily.anchors.low.clone().add(lily.group.position),
-        lily.anchors.upperLeft.clone().add(lily.group.position),
-        lily.anchors.lowerLeft.clone().add(lily.group.position)
-      ];
+      const worldOrigins = lily.anchors.map((a) => a.clone().add(lily.group.position));
 
       const heartText = createHeartText({
         mainPoints,
@@ -1876,16 +1879,18 @@
       window.addEventListener('pointermove', onPointerMove, { passive: true });
       window.addEventListener('pointerleave', () => heartText.setPointer(999, 999, false), { passive: true });
 
-      const DURATION = 24.0;
+      const DURATION = 32.0;
       let elapsed = 0;
 
       replayBtn.addEventListener('click', () => {
         elapsed = 0;
+        manualOverrideTimer = 0;
       });
 
       rotateBtn.addEventListener('click', () => {
-        controls.autoRotate = !controls.autoRotate;
-        rotateBtn.classList.toggle('active', controls.autoRotate);
+        cinemaCamEnabled = !cinemaCamEnabled;
+        manualOverrideTimer = 0;
+        rotateBtn.classList.toggle('active', cinemaCamEnabled);
       });
 
       window.addEventListener('resize', () => {
@@ -1900,6 +1905,116 @@
       });
 
       const clock = new THREE.Clock();
+      const desiredCamPos = new THREE.Vector3();
+      const desiredTarget = new THREE.Vector3();
+
+      /**
+       * Computes a creative, continuous 360-degree camera choreography:
+       * 1. Stage I (0 -> 0.30): Starts at the root base and spirals 360° upward following the growing stem.
+       * 2. Stage II (0.30 -> 0.68): Full 360° ascending orbit around the 12 3D Stargazer Lilies as they bloom.
+       * 3. Stage IIIa (0.68 -> 0.79): Close-up sweeping glide from left to right across "Jasin Loves You Most / Forever Yours...".
+       * 4. Stage IIIb (0.79 -> 0.87): Smooth pull-back into a full-screen hero framing of both bouquet and text.
+       * 5. Finale (0.87 -> 1.00+): Morphs into "J+R" and continues a graceful 360° orbit around the entire scene.
+       */
+      function updateCinematicCamera(progress, totalTime, dt) {
+        if (!cinemaCamEnabled || userInteracting) return;
+        if (manualOverrideTimer > 0) {
+          manualOverrideTimer = Math.max(0, manualOverrideTimer - dt);
+          return;
+        }
+
+        const baseDist = getIdealCameraDistance();
+
+        if (progress < STAGE.growthEnd) {
+          // Stage I: Start low at the stem base and spiral 360° upward following the growing tip
+          const t1 = ease(progress / STAGE.growthEnd);
+          const tipPoint = lily.stemCurve.getPointAt(clamp01(t1 * 0.94)).add(lily.group.position);
+
+          const az = t1 * Math.PI * 2.0; // Full 360° spiral around the stem
+          const dist = baseDist * lerp(0.68, 0.78, t1);
+          const camY = lerp(0.15, 2.55, t1);
+
+          desiredCamPos.set(
+            Math.sin(az) * dist,
+            camY,
+            Math.cos(az) * dist
+          );
+          desiredTarget.set(
+            tipPoint.x * 0.4,
+            lerp(0.35, 2.45, t1),
+            tipPoint.z * 0.4
+          );
+        } else if (progress < STAGE.bloomEnd) {
+          // Stage II: Full 360° ascending showcase orbit around the 12 3D Stargazer Lilies
+          const t2 = (progress - STAGE.growthEnd) / (STAGE.bloomEnd - STAGE.growthEnd);
+          const smoothT2 = ease(t2);
+
+          const az = Math.PI * 2.0 + smoothT2 * Math.PI * 2.0; // Second full 360° orbit during blooming
+          const zoomPulse = 1.0 - Math.sin(smoothT2 * Math.PI) * 0.24;
+          const dist = baseDist * zoomPulse * 0.86;
+          const camY = lerp(2.25, 3.05, smoothT2) + Math.sin(smoothT2 * Math.PI * 2.0) * 0.35;
+
+          desiredCamPos.set(
+            Math.sin(az) * dist,
+            camY,
+            Math.cos(az) * dist
+          );
+          desiredTarget.set(
+            0,
+            lerp(2.1, 2.55, smoothT2),
+            0
+          );
+        } else if (progress < 0.79) {
+          // Stage IIIa: Close-up sweeping pass across "Jasin Loves You Most / Forever Yours..."
+          const tClose = seg(progress, STAGE.bloomEnd, 0.79);
+          const sweepX = lerp(-1.55, 1.55, tClose);
+          const closeDist = baseDist * 0.56;
+
+          desiredCamPos.set(
+            sweepX * 0.85,
+            -1.15 + Math.sin(tClose * Math.PI) * 0.18,
+            0.68 + closeDist
+          );
+          desiredTarget.set(
+            sweepX,
+            -1.42,
+            0.68
+          );
+        } else if (progress < 0.87) {
+          // Stage IIIb: Glide back to full-screen hero framing showing both the 3D bouquet & full text
+          const tFull = seg(progress, 0.79, 0.85);
+          const sweepX = lerp(1.55, 0.0, tFull);
+          const closeDist = baseDist * 0.56;
+
+          desiredCamPos.set(
+            sweepX * 0.85,
+            lerp(-1.15, 0.92, tFull),
+            lerp(0.68 + closeDist, baseDist, tFull)
+          );
+          desiredTarget.set(
+            sweepX,
+            lerp(-1.42, 0.82, tFull),
+            lerp(0.68, 0.28, tFull)
+          );
+        } else {
+          // Finale: Morph into "J+R" and orbit continuously 360° around the entire bouquet & emblem
+          const tf = seg(progress, 0.87, 0.94);
+          const orbitTime = Math.max(0, totalTime - DURATION * 0.88);
+          const az = orbitTime * 0.38 * tf;
+          const dist = baseDist * lerp(1.0, 0.96, tf);
+
+          desiredCamPos.set(
+            Math.sin(az) * dist,
+            0.95 + Math.sin(orbitTime * 0.45) * 0.28 * tf,
+            Math.cos(az) * dist
+          );
+          desiredTarget.set(0, 0.82, 0.28);
+        }
+
+        const followSpeed = 1.0 - Math.exp(-dt * 2.8);
+        camera.position.lerp(desiredCamPos, followSpeed);
+        controls.target.lerp(desiredTarget, followSpeed * 1.2);
+      }
 
       function animate() {
         requestAnimationFrame(animate);
@@ -1917,9 +2032,9 @@
         } else if (progress < STAGE.bloomEnd) {
           phaseLabel.textContent = 'Phase II · Petal Morphogenesis';
           stageStatus.textContent = `Blooming ${pct}%`;
-        } else if (progress < 0.82) {
+        } else if (progress < 0.87) {
           phaseLabel.textContent = 'Phase III · Heart Constellation';
-          stageStatus.textContent = `Forming ${pct}%`;
+          stageStatus.textContent = `Jasin ♥ ${pct}%`;
         } else if (progress < 0.99) {
           phaseLabel.textContent = 'Finale · J+R in Hearts';
           stageStatus.textContent = `J+R ${pct}%`;
@@ -1928,19 +2043,7 @@
           stageStatus.textContent = 'J+R ♥';
         }
 
-        if (!userInteracting && !controls.autoRotate) {
-          const baseZ = getIdealCameraDistance();
-          camera.position.x = THREE.MathUtils.lerp(
-            camera.position.x,
-            Math.sin(totalTime * 0.18) * 0.55,
-            0.02
-          );
-          camera.position.z = THREE.MathUtils.lerp(
-            camera.position.z,
-            baseZ + Math.cos(totalTime * 0.14) * 0.35,
-            0.02
-          );
-        }
+        updateCinematicCamera(progress, totalTime, dt);
 
         lily.update(progress, totalTime);
         heartText.update(progress, totalTime);
@@ -1955,4 +2058,4 @@
     window.addEventListener('load', init);
   </script>
 </body>
-  </html>
+</html>
